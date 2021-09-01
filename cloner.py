@@ -87,21 +87,21 @@ def githubdownloader(destpath=None, debug=False, name=None, recursive=False, nod
 					removepath(Path(destpath))
 			except OSError as e:
 				print(f'[downloader] error {e} {destpath}')
-				return {'name':repo_name,'time': time()-start_time}
+				return {'name':repo.name,'time': time()-start_time}
 			else:
 				p = Popen(gitcmd, shell=False, stdout=PIPE, stderr=PIPE)
 				status = p.wait()
 				stdout, stderr = p.communicate()
-				return {'name':repo_name,'time': time()-start_time}
+				return {'name':repo.name,'time': time()-start_time}
 		elif os.path.exists(destpath):
 			print(f'[downloader] {repo.name} {destpath} already exists, skipping')
-			return {'name':repo_name,'time': time()-start_time}
+			return {'name':repo.name,'time': time()-start_time}
 		else:
 			print(f'[downloader] {repo.name} {destpath}  skipping')
-			return {'name':repo_name,'time': time()-start_time}
+			return {'name':repo.name,'time': time()-start_time}
 	else:
 		print(f'[downloader] {repo.name} nodl set {destpath} not downloading')
-		return {'name':repo_name,'time': time()-start_time}
+		return {'name':repo.name,'time': time()-start_time}
 
 def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
 	if debug:
@@ -116,11 +116,11 @@ def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
 
 
 def main(args):
+	starttime = time()
 	if args.debug:
 		print(f'[main] debug {args.debug}')
 	github = Github(GITHUBAPITOKEN)
 	repo_list = get_user_repos(args.user, gh=github, debug=args.debug)
-	starttime = time()
 	print(f'[{args.user}] {len(repo_list)} repos')
 	threads = []
 	totalsize = 0

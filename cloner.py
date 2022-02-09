@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
-from github import Github, GithubException
+from github import Github
 import argparse
 from functools import partial
-from threading import Thread
 import concurrent.futures
 from subprocess import Popen, PIPE
 from shutil import rmtree
@@ -17,6 +16,7 @@ from loguru import logger
 GITHUBAPITOKEN = os.getenv('GITHUBAPITOKEN')
 GITBINARY = '/usr/bin/git'
 
+
 def removepath(directory):
 	directory = Path(directory)
 	for item in directory.iterdir():
@@ -24,16 +24,18 @@ def removepath(directory):
 			try:
 				os.chmod(item, stat.S_IWRITE)
 				rmtree(item, ignore_errors=True)
-				# os.rmdir(item)
+			# os.rmdir(item)
 			except Exception as e:
-				pass
-				#rmtree(item, ignore_errors=True)
+				logger.error(f'Error {e} while removing {item}')
+		# rmtree(item, ignore_errors=True)
 		else:
 			os.chmod(item, stat.S_IWRITE)
 			item.unlink()
 	directory.rmdir()
 
-def githubdownloader(destpath=None, debug=False, name=None, recursive=False, nodl=False, repo=None, url=None, overwrite=False):
+
+def githubdownloader(destpath=None, debug=False, recursive=False, nodl=False, repo=None, url=None, overwrite=False):
+	logger.debug(f'[downloader] cloning {repo.name}')
 	start_time = time()
 	if repo is None:
 		return -1
@@ -43,16 +45,15 @@ def githubdownloader(destpath=None, debug=False, name=None, recursive=False, nod
 		gitcmd = [GITBINARY, 'clone', '--quiet', url, destpath]
 	if not nodl:
 		if not os.path.exists(destpath):
-			logger.debug(f'[downloader] cloning {repo.name}')
 			p = Popen(gitcmd, shell=False, stdout=PIPE, stderr=PIPE)
 			status = p.wait()
-			stdout, stderr = p.communicate()
+			p.communicate()
 			root_directory = Path(destpath)
 			reposize = sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
 			if debug:
-				logger.debug(f'[downloader] done {repo.name} status {status} time: {time()-start_time:.2f} size: {reposize}')
-			rettime = f'{time()-start_time:.2f}'
-			return {'name':repo.name,'size':reposize, 'time': rettime}
+				logger.debug(f'[downloader] done {repo.name} status {status} time: {time() - start_time:.2f} size: {reposize}')
+			rettime = f'{time() - start_time:.2f}'
+			return {'name': repo.name, 'size': reposize, 'time': rettime}
 		elif os.path.exists(destpath) and overwrite:
 			logger.debug(f'[downloader] {repo.name} {destpath} exists, overwriting {overwrite}')
 			try:
@@ -60,26 +61,27 @@ def githubdownloader(destpath=None, debug=False, name=None, recursive=False, nod
 					removepath(Path(destpath))
 			except OSError as e:
 				logger.debug(f'[downloader] error {e} {destpath}')
-				rettime = f'{time()-start_time:.2f}'
-				return {'name':repo.name,'time': rettime}
+				rettime = f'{time() - start_time:.2f}'
+				return {'name': repo.name, 'time': rettime}
 			else:
 				p = Popen(gitcmd, shell=False, stdout=PIPE, stderr=PIPE)
-				status = p.wait()
-				stdout, stderr = p.communicate()
-				rettime = f'{time()-start_time:.2f}'
-				return {'name':repo.name,'time': rettime}
+				p.wait()
+				p.communicate()
+				rettime = f'{time() - start_time:.2f}'
+				return {'name': repo.name, 'time': rettime}
 		elif os.path.exists(destpath):
 			logger.debug(f'[downloader] {repo.name} {destpath} already exists, skipping')
-			rettime = f'{time()-start_time:.2f}'
-			return {'name':repo.name,'time': rettime}
+			rettime = f'{time() - start_time:.2f}'
+			return {'name': repo.name, 'time': rettime}
 		else:
 			logger.debug(f'[downloader] {repo.name} {destpath}  skipping')
-			rettime = f'{time()-start_time:.2f}'
-			return {'name':repo.name,'time': rettime}
+			rettime = f'{time() - start_time:.2f}'
+			return {'name': repo.name, 'time': rettime}
 	else:
 		logger.debug(f'[downloader] {repo.name} nodl set {destpath} not downloading')
-		rettime = f'{time()-start_time:.2f}'
-		return {'name':repo.name,'time': rettime}
+		rettime = f'{time() - start_time:.2f}'
+		return {'name': repo.name, 'time': rettime}
+
 
 def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
 	if debug:
@@ -100,19 +102,18 @@ def main(args):
 	github = Github(GITHUBAPITOKEN)
 	repo_list = get_user_repos(args.user, gh=github, debug=args.debug)
 	logger.debug(f'[{args.user}] {len(repo_list)} repos')
-	threads = []
-	totalsize = 0
 	futures = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 		for repo in repo_list:
 			dlpath = os.path.join(args.path, args.user, repo.name)
-			func = partial(githubdownloader, url=repo.clone_url, destpath=dlpath, debug=args.debug, name=repo.name, nodl=args.nodl, repo=repo, overwrite=args.overwrite)
+			func = partial(githubdownloader, url=repo.clone_url, destpath=dlpath, debug=args.debug, nodl=args.nodl, repo=repo, overwrite=args.overwrite)
 			future = executor.submit(func)
 			futures.append(future)
 	for result in concurrent.futures.as_completed(futures):
 		logger.debug(f'[fut] res: {result.result()}')
 	if args.debug:
 		logger.debug(f'[finish] time {time() - starttime:.2f}')
+
 
 if __name__ == '__main__':
 	logger.debug(f'[main] {inspect.stack()[0][3]}')

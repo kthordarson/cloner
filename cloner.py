@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-
 from github import Github
+from github.GithubException import  BadCredentialsException
+#from github3.github import GitHub as Github
+#from github.client import GHClient as Github
 import argparse
 from functools import partial
 import concurrent.futures
@@ -13,7 +15,7 @@ import inspect
 from pathlib import Path
 from loguru import logger
 
-GITHUBAPITOKEN = os.getenv('GITHUBAPITOKEN')
+GITHUBCLONERTOKEN = os.getenv('GITHUBCLONERTOKEN')
 GITBINARY = '/usr/bin/git'
 
 
@@ -84,14 +86,19 @@ def githubdownloader(destpath=None, debug=False, recursive=False, nodl=False, re
 
 
 def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
-	if debug:
-		logger.debug(f'[getrepos] {inspect.stack()[1][3]} {inspect.stack()[2][3]}')
-	g_user_sesssion = gh.get_user(git_username)
+	repos = None
+	try:
+		g_user_sesssion = gh.get_user(git_username)
+	except BadCredentialsException as e:
+		logger.error(f'[get_user_repos] autherr {e}')
+		raise e
 	g_repos = g_user_sesssion.get_repos()
+	# return g_repos
 	if forks:
 		repos = [r for r in g_repos]
 	else:
 		repos = [r for r in g_repos if not r.fork]
+	logger.debug(f'[gur] u:{git_username} forks:{forks} ghrepos:{g_repos.totalCount} r:{len(repos)}')
 	return repos
 
 
@@ -99,8 +106,12 @@ def main(args):
 	starttime = time()
 	if args.debug:
 		logger.debug(f'[main] debug {args.debug}')
-	github = Github(GITHUBAPITOKEN)
-	repo_list = get_user_repos(args.user, gh=github, debug=args.debug)
+	github = Github(GITHUBCLONERTOKEN)
+	try:
+		repo_list = get_user_repos(args.user, gh=github, debug=args.debug)
+	except BadCredentialsException as e:
+		logger.error(f'[main] autherr {e}')
+		return
 	logger.debug(f'[{args.user}] {len(repo_list)} repos')
 	futures = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:

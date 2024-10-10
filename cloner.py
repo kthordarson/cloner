@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 from github import Github
-from github.GithubException import  BadCredentialsException
-#from github3.github import GitHub as Github
-#from github.client import GHClient as Github
+from github.GithubException import BadCredentialsException
 import argparse
 from functools import partial
 import concurrent.futures
@@ -11,7 +9,6 @@ from shutil import rmtree
 import os
 import stat
 from time import time
-import inspect
 from pathlib import Path
 from loguru import logger
 
@@ -37,7 +34,7 @@ def removepath(directory):
 
 
 def githubdownloader(destpath=None, debug=False, recursive=False, nodl=False, repo=None, url=None, overwrite=False):
-	logger.debug(f'[downloader] cloning {repo.name}')
+	logger.debug(f'[ghdl] cloning {repo.name}')
 	start_time = time()
 	if repo is None:
 		return -1
@@ -53,16 +50,16 @@ def githubdownloader(destpath=None, debug=False, recursive=False, nodl=False, re
 			root_directory = Path(destpath)
 			reposize = sum(f.stat().st_size for f in root_directory.glob('**/*') if f.is_file())
 			if debug:
-				logger.debug(f'[downloader] done {repo.name} status {status} time: {time() - start_time:.2f} size: {reposize}')
+				logger.debug(f'[ghdl] done {repo.name} status {status} time: {time() - start_time:.2f} size: {reposize}')
 			rettime = f'{time() - start_time:.2f}'
 			return {'name': repo.name, 'size': reposize, 'time': rettime}
 		elif os.path.exists(destpath) and overwrite:
-			logger.debug(f'[downloader] {repo.name} {destpath} exists, overwriting {overwrite}')
+			logger.debug(f'[ghdl] {repo.name} {destpath} exists, overwriting {overwrite}')
 			try:
 				if os.path.exists(destpath):
 					removepath(Path(destpath))
 			except OSError as e:
-				logger.debug(f'[downloader] error {e} {destpath}')
+				logger.debug(f'[ghdl] error {e} {destpath}')
 				rettime = f'{time() - start_time:.2f}'
 				return {'name': repo.name, 'time': rettime}
 			else:
@@ -72,20 +69,20 @@ def githubdownloader(destpath=None, debug=False, recursive=False, nodl=False, re
 				rettime = f'{time() - start_time:.2f}'
 				return {'name': repo.name, 'time': rettime}
 		elif os.path.exists(destpath):
-			logger.debug(f'[downloader] {repo.name} {destpath} already exists, skipping')
+			logger.debug(f'[ghdl] {repo.name} {destpath} already exists, skipping')
 			rettime = f'{time() - start_time:.2f}'
 			return {'name': repo.name, 'time': rettime}
 		else:
-			logger.debug(f'[downloader] {repo.name} {destpath}  skipping')
+			logger.debug(f'[ghdl] {repo.name} {destpath}  skipping')
 			rettime = f'{time() - start_time:.2f}'
 			return {'name': repo.name, 'time': rettime}
 	else:
-		logger.debug(f'[downloader] {repo.name} nodl set {destpath} not downloading')
+		logger.debug(f'[ghdl] {repo.name} nodl set {destpath} not downloading')
 		rettime = f'{time() - start_time:.2f}'
 		return {'name': repo.name, 'time': rettime}
 
 
-def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
+def get_user_repos(git_username=None, gh=None, forks=False, debug=False, lang_filter=None):
 	repos = None
 	try:
 		g_user_sesssion = gh.get_user(git_username)
@@ -104,8 +101,6 @@ def get_user_repos(git_username=None, gh=None, forks=False, debug=False):
 
 def main(args):
 	starttime = time()
-	if args.debug:
-		logger.debug(f'[main] debug {args.debug}')
 	github = Github(GITHUBCLONERTOKEN)
 	try:
 		repo_list = get_user_repos(args.user, gh=github, debug=args.debug)
@@ -116,21 +111,20 @@ def main(args):
 	futures = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
 		for repo in repo_list:
-			dlpath = os.path.join(args.path, args.user, repo.name)
+			dlpath = os.path.join(args.destpath, args.user, repo.name)
 			func = partial(githubdownloader, url=repo.clone_url, destpath=dlpath, debug=args.debug, nodl=args.nodl, repo=repo, overwrite=args.overwrite)
 			future = executor.submit(func)
 			futures.append(future)
 	for result in concurrent.futures.as_completed(futures):
-		logger.debug(f'[fut] res: {result.result()}')
+		logger.debug(f'[fut] res: {result.result()["name"]} {result.result()["size"]} {result.result()["time"]}')
 	if args.debug:
 		logger.debug(f'[finish] time {time() - starttime:.2f}')
 
 
 if __name__ == '__main__':
-	logger.debug(f'[main] {inspect.stack()[0][3]}')
 	parser = argparse.ArgumentParser(description="github clone user")
 	parser.add_argument("--user", nargs="?", default=".", help="github.com username", required=True, action="store")
-	parser.add_argument("--path", nargs="?", default=".", help="destination path", required=True, action="store")
+	parser.add_argument("--destpath", nargs="?", default=".", help="destination path", required=True, action="store")
 	parser.add_argument('--forks', dest='forks', action="store_true", default=False, help='include forks')
 	parser.add_argument('--recursive', dest='recursive', action="store_true", default=False, help='recursive mode')
 	parser.add_argument('--debug', dest='debug', action="store_true", default=True, help='debug')
